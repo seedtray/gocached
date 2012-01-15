@@ -7,7 +7,7 @@ const (
   IllegalParameter
 )
 
-type ErrorCode uint;
+type ErrorCode uint
 
 type StorageEntry struct {
   exptime    uint32

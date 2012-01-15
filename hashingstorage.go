@@ -1,18 +1,18 @@
 package main
 
-type Hasher func (string) uint32
+type Hasher func(string) uint32
 
 type HashingStorage struct {
-  size uint32
-  hasher Hasher
+  size           uint32
+  hasher         Hasher
   storageBuckets []CacheStorage
 }
 
-type StorageFactory func () Storage
+type StorageFactory func() Storage
 
 func newHashingStorage(size uint32, factory CacheStorageFactory) *HashingStorage {
   s := &HashingStorage{size, hornerHasher, make([]CacheStorage, size)}
-  for i := uint32(0); i < size; i++  {
+  for i := uint32(0); i < size; i++ {
     s.storageBuckets[i] = factory()
   }
   return s
@@ -26,11 +26,11 @@ func (self *HashingStorage) Add(key string, flags uint32, exptime uint32, bytes 
   return self.findBucket(key).Add(key, flags, exptime, bytes, content)
 }
 
-func (self *HashingStorage) Replace(key string, flags uint32, exptime uint32, bytes uint32, content []byte) (ErrorCode,*StorageEntry,*StorageEntry) {
+func (self *HashingStorage) Replace(key string, flags uint32, exptime uint32, bytes uint32, content []byte) (ErrorCode, *StorageEntry, *StorageEntry) {
   return self.findBucket(key).Replace(key, flags, exptime, bytes, content)
 }
 
-func (self *HashingStorage) Append(key string, bytes uint32, content []byte) (ErrorCode,*StorageEntry,*StorageEntry) {
+func (self *HashingStorage) Append(key string, bytes uint32, content []byte) (ErrorCode, *StorageEntry, *StorageEntry) {
   return self.findBucket(key).Append(key, bytes, content)
 }
 
@@ -61,7 +61,7 @@ func (self *HashingStorage) Expire(key string) {
 func (self *HashingStorage) findBucket(key string) CacheStorage {
   storageIndex := self.hasher(key) % self.size
   storage := self.storageBuckets[storageIndex]
- // logger.Printf("Using storage %d", storageIndex)
+  // logger.Printf("Using storage %d", storageIndex)
   return storage
 }
 
