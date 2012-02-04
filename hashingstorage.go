@@ -54,8 +54,8 @@ func (self *HashingStorage) Incr(key string, value uint64, incr bool) (ErrorCode
   return self.findBucket(key).Incr(key, value, incr)
 }
 
-func (self *HashingStorage) Expire(key string) {
-  self.findBucket(key).Expire(key)
+func (self *HashingStorage) Expire(key string, check bool) {
+  self.findBucket(key).Expire(key, check)
 }
 
 func (self *HashingStorage) findBucket(key string) CacheStorage {

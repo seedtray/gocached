@@ -126,7 +126,7 @@ func processNodeChanges(storage *GenerationalStorage, channel <-chan UpdateMessa
    //     logger.Printf("Collecting generation %d", generation)
         for key , _ := range(generation.inhabitants) {
   //        logger.Printf("Collecting item with key %s", key)
-          storage.cacheStorage.Expire(key)
+          storage.cacheStorage.Expire(key, false)
           storage.items -= 1
         }
       }
@@ -134,7 +134,7 @@ func processNodeChanges(storage *GenerationalStorage, channel <-chan UpdateMessa
         permGen := storage.findGeneration(GenerationSize, true)
         storage.generations[GenerationSize] = nil, false
         for key , _ := range(permGen.inhabitants) {
-          storage.cacheStorage.Expire(key)
+          storage.cacheStorage.Expire(key, false)
           storage.items -= 1
         }
         logger.Printf("Memory pressure. Collecting %d expiring items. %d items on permanent generation", storage.items)

@@ -88,6 +88,6 @@ func (self *EventNotifierStorage) Incr(key string, value uint64, incr bool) (Err
   return self.storage.Incr(key, value, incr)
 }
 
-func (self *EventNotifierStorage) Expire(key string) {
-  self.storage.Expire(key)
+func (self *EventNotifierStorage) Expire(key string, check bool) {
+  self.storage.Expire(key, check)
 }

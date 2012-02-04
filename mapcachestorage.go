@@ -162,11 +162,11 @@ func (self *MapCacheStorage) Incr(key string, value uint64, incr bool) (ErrorCod
 /* keep a null object for map deletion */
 var nullStorageEntry = &StorageEntry{}
 
-func (self *MapCacheStorage) Expire(key string) {
+func (self *MapCacheStorage) Expire(key string, check bool) {
 	self.rwLock.Lock()
 	defer self.rwLock.Unlock()
-  _, present := self.storageMap[key]
-	if present {
+  entry, present := self.storageMap[key]
+	if present && (!check || entry.expired()) {
 		self.storageMap[key] = nullStorageEntry, false
 	}
 }

@@ -53,5 +53,5 @@ type CacheStorage interface {
   // that a non-existent key exists with value 0; instead, they will fail. 
   Incr(key string, value uint64, incr bool) (err ErrorCode, previous *StorageEntry, result *StorageEntry)
 
-  Expire(key string)
+  Expire(key string, check bool)
 }
