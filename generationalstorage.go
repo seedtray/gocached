@@ -11,9 +11,9 @@ const (
   StorageThreshold = 5000
 )
 
-var timer = func(updatesChannel chan UpdateMessage) {
+var timer = func(updatesChannel chan UpdateMessage, frequency int64) {
   for {
-    time.Sleep(1e9 * GCDelay) // one second * GCDelay
+    time.Sleep(1e9 * frequency) // one second * GCDelay
     updatesChannel <- UpdateMessage{Collect, "", time.Seconds(), 0}
   }
 }
@@ -55,9 +55,9 @@ type GenerationalStorage struct {
   items           uint64
 }
 
-func newGenerationalStorage(cacheStorage CacheStorage, updatesChannel chan UpdateMessage) *GenerationalStorage {
+func newGenerationalStorage(expiring_frequency int64, cacheStorage CacheStorage, updatesChannel chan UpdateMessage) *GenerationalStorage {
   storage := &GenerationalStorage{ make(map [int64] *Generation), updatesChannel, cacheStorage, roundTime(time.Seconds()) - GenerationSize, 0 }
-  go timer(updatesChannel)
+  go timer(updatesChannel, expiring_frequency)
   go processNodeChanges(storage, updatesChannel)
   return storage;
 }

@@ -61,7 +61,7 @@ func main() {
 	case "generational":
     updatesChannel := make(chan UpdateMessage, 5000)
     eventful_storage = newEventNotifierStorage(partition_storage, updatesChannel)
-    newGenerationalStorage(partition_storage, updatesChannel)
+    newGenerationalStorage(*expiring_frequency, partition_storage, updatesChannel)
 	case "heap":
     updatesChannel := make(chan UpdateMessage, 5000)
     eventful_storage = newEventNotifierStorage(partition_storage, updatesChannel)
