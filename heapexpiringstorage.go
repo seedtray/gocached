@@ -4,120 +4,71 @@ import (
 	"expiry"
 	"time"
 	"container/heap"
-	"os"
 )
 
-//Implements a Storage interface with entry expiration.
-//Expiration is based on notification of new/updated exptime values from storage to an expiring registry (heap).
-//Basically we 'type embed' MapStorage, reimplementing the methods that needs to notify heap of new exptimes. Notification is done via channel 'bg'.
-type NotifyStorage struct {
-	MapStorage
-	bg   chan expiry.Entry
+//Implements a CacheStorage interface with entry expiration.
+type HeapExpiringStorage struct {
+  CacheStorage
+  updatesChannel  chan UpdateMessage
 	heap *expiry.Heap
 }
 
-//Daemon that waits on two events. One triggers expired item recollection from the storage (timer). The other (bg) receives updates on exptime from storage.
-func (ns *NotifyStorage) ExpiringDaemon(freq int64) {
-	logger.Println("Collecting")
-	for timer := time.NewTicker(freq * 1000000000);; {
-		select {
-		case <-timer.C:
-			ns.Collect()
-		case entry := <-ns.bg:
-			ns.Update(entry)
-		}
-	}
-	logger.Println("Exit Expiring Daemon")
+func (hs *HeapExpiringStorage) ProcessUpdates() {
+  for {
+    msg := <-hs.updatesChannel
+    switch msg.op {
+    case Add, Change:
+      hs.AddEntry(expiry.Entry{&msg.key, uint32(msg.newEpoch)}, uint32(msg.currentEpoch))
+    case Collect:
+      logger.Println("Collecting expired entries")
+      hs.Collect(uint32(msg.currentEpoch))
+    }
+  }
 }
 
-//Update. Given an exptime update, stores the entry in a exptime ordered heap
-func (ns *NotifyStorage) Update(entry expiry.Entry) {
-	now := uint32(time.Seconds())
+//Update. Given an exptime update, stores a new entry in a exptime ordered heap
+func (hs *HeapExpiringStorage) AddEntry(entry expiry.Entry, now uint32) {
 	if entry.Exptime > now {
-		heap.Push(ns.heap, entry)
+		heap.Push(hs.heap, entry)
 	}
 }
 
-// Inspects the exptime heap for candidates for expiration, and dispatches to storage.MaybeExpire. The heap won't contain any expired entry refs(*) when it exits
-func (ns *NotifyStorage) Collect() {
-	now := uint32(time.Seconds())
-	h := ns.heap
+// Inspects the exptime heap for candidates for expiration, and dispatches to storage.Expire. The heap won't contain any expired entry refs(*) when it exits
+func (hs *HeapExpiringStorage) Collect(now uint32) {
+	h := hs.heap
 	if h.Len() == 0 {
 		return
 	}
-	logger.Printf("heap size: %v. heap: %v", h.Len(), *h)
+	logger.Printf("heap size: %v", h.Len())
 	for h.Len() > 0 {
 		tip := h.Tip()
 		if tip.Exptime > now {
 			break
 		}
 		h.Pop()
-		logger.Println("trying to expire %+v at %v", tip, now)
-		ns.MaybeExpire(*tip.Key, now)
+		logger.Println("trying to expire %s at %v", *tip.Key, now)
+		hs.CacheStorage.Expire(*tip.Key, true)
 	}
 }
-func newNotifyStorage(expiring_frequency int64) *NotifyStorage {
-  ns := &NotifyStorage{}
-  ns.Init(expiring_frequency)
-  return ns
+
+//Allocate a new HeapExpiringStorage and Initialize it
+func NewHeapExpiringStorage(collect_frequency int64, cacheStorage CacheStorage, updatesChannel chan UpdateMessage) *HeapExpiringStorage {
+  hs := &HeapExpiringStorage{cacheStorage, updatesChannel, nil}
+  hs.Init(collect_frequency)
+  return hs
 }
-//Init an allocated NotifyStorage
-func (ns *NotifyStorage) Init(daemon_freq int64) {
-	logger.Println("init notify storage")
-	ns.MapStorage.Init()
-	ns.bg = make(chan expiry.Entry, 100)
-	ns.heap = expiry.NewHeap(100)
-	go ns.ExpiringDaemon(daemon_freq)
+//Init an allocated HeapExpiringStorage
+func (hs *HeapExpiringStorage) Init(collect_frequency int64) {
+	logger.Println("init heap notify storage")
+	hs.heap = expiry.NewHeap(100) //TODO, size as config parameter
+	go hs.CollectTicker(collect_frequency)
+  go hs.ProcessUpdates()
 }
 
-//Method Overrides for operations that may change or add a new expiration time for an entry
-
-func (self *NotifyStorage) Set(key string, flags uint32, exptime uint32, bytes uint32, content []byte) (err os.Error) {
-	err = self.MapStorage.Set(key, flags, exptime, bytes, content)
-	if err == nil {
-		self.bg <- expiry.Entry{&key, exptime}
-	}
-	return err
+func (hs *HeapExpiringStorage) CollectTicker(collect_frequency int64){
+  for {
+    time.Sleep(1e9 * collect_frequency)
+    hs.updatesChannel  <- UpdateMessage{Collect, "", time.Seconds(), 0}
+  }
 }
 
-func (self *NotifyStorage) Add(key string, flags uint32, exptime uint32, bytes uint32, content []byte) (err os.Error) {
-	err = self.MapStorage.Add(key, flags, exptime, bytes, content)
-	if err == nil {
-		self.bg <- expiry.Entry{&key, exptime}
-	}
-	return err
-}
-
-func (self *NotifyStorage) Replace(key string, flags uint32, exptime uint32, bytes uint32, content []byte) (err os.Error) {
-	err = self.MapStorage.Replace(key, flags, exptime, bytes, content)
-	if err == nil {
-		self.bg <- expiry.Entry{&key, exptime}
-	}
-	return err
-}
-
-func (self *NotifyStorage) Cas(key string, flags uint32, exptime uint32, bytes uint32, cas_unique uint64, content []byte) (err os.Error) {
-	err = self.MapStorage.Cas(key, flags, exptime, bytes, cas_unique, content)
-	if err == nil {
-		self.bg <- expiry.Entry{&key, exptime}
-	}
-	return err
-}
-
-// Expire item implementation for MapStorage. May go into Storage interface some day 
-func (self *MapStorage) MaybeExpire(key string, now uint32) bool {
-	self.rwLock.RLock()
-	entry, present := self.storageMap[key]
-	self.rwLock.RUnlock()
-	if present && entry.exptime <= now {
-		logger.Printf("expiring key %v %+v at %v", key, entry, now)
-		self.rwLock.Lock()
-		self.storageMap[key] = mapStorageEntry{}, false
-		self.rwLock.Unlock()
-		return true
-	} else {
-		logger.Println("not expiring %v", key)
-		return false
-	}
-	return false
-}

@@ -12,22 +12,22 @@ import (
 //global logger
 var logger = log.New(os.Stdout, "gocached: ", log.Lshortfile|log.LstdFlags)
 
+// specific typing for base storage factory, just build a map cache storage
+func base_storage_factory () CacheStorage { return newMapCacheStorage() }
 
 func main() {
-	var storage CacheStorage
-	var factory CacheStorageFactory
 
   /*runtime.GOMAXPROCS(1)*/
 	// command line flags and parsing
 	var port = flag.String("port", "11212", "memcached port")
   /*var memprofile = flag.String("memprofile", "", "write memory profile to this file")*/
 
-  //	var storage_choice = flag.String("storage", "generational",
-//		"storage implementation (generational, heap, map)")
-//	var expiring_frequency = flag.Int64("expiring-interval", 10,
-//		"expiring interval in seconds")
-
-var partitions = flag.Int("partitions", 10, "storage partitions (0 or 1 to disable)")
+  var storage_choice = flag.String("storage", "generational",
+		"storage implementation (generational, heap, leak)")
+	var expiring_frequency = flag.Int64("expiring-interval", 10,
+		"expiring interval in seconds")
+  var partitions = flag.Int("partitions", 10, 
+    "storage partitions (0 or 1 to disable)")
 	flag.Parse()
 
 
@@ -42,33 +42,31 @@ var partitions = flag.Int("partitions", 10, "storage partitions (0 or 1 to disab
     /*}()*/
   /*}*/
 
-  /*
-	// storage implementation selection
-	switch *storage_choice {
-	case "map":
-		logger.Print("warning, map storage does not expire entries")
-		factory = func () Storage { return newMapStorage() }
-	case "generational":
-		factory = func () Storage { return newGenerationalStorage() }
-	case "heap":
-		factory = func () Storage { return newNotifyStorage(*expiring_frequency) }
-	default:
-		logger.Fatalln("Invalid storage selection")
-	}
-*/
-	// whether using partitioned or standalone storage
+	// whether using partitioned or single storage
+
+  var partition_storage CacheStorage
+  var eventful_storage CacheStorage
 
 	if *partitions > 1 {
-    logger.Printf("Building storage with partitioning support: %d slots", *partitions)
-    updatesChannel := make(chan UpdateMessage, 5000)
-    factory = func() CacheStorage { return newMapCacheStorage() }
-    //go updateMessageLogger(updatesChannel)
-    hashingStorage := newHashingStorage(uint32(*partitions), factory)
-    storage = newEventNotifierStorage(hashingStorage, updatesChannel)
-    newGenerationalStorage(hashingStorage, updatesChannel)
+    partition_storage = newHashingStorage(uint32(*partitions), base_storage_factory)
 	} else {
-		storage = newMapCacheStorage()//factory()
+		partition_storage = base_storage_factory()
 	}
+
+	// eventful storage implementation selection
+	switch *storage_choice {
+	case "leak":
+		logger.Print("warning, will not expire entries")
+    eventful_storage = partition_storage
+	case "generational":
+    updatesChannel := make(chan UpdateMessage, 5000)
+    eventful_storage = newEventNotifierStorage(partition_storage, updatesChannel)
+    newGenerationalStorage(partition_storage, updatesChannel)
+	case "heap":
+    updatesChannel := make(chan UpdateMessage, 5000)
+    eventful_storage = newEventNotifierStorage(partition_storage, updatesChannel)
+    NewHeapExpiringStorage(*expiring_frequency, partition_storage, updatesChannel)
+  }
 
 	// network setup
 	if addr, err := net.ResolveTCPAddr("tcp", "0.0.0.0:"+*port); err != nil {
@@ -83,7 +81,7 @@ var partitions = flag.Int("partitions", 10, "storage partitions (0 or 1 to disab
       if conn, err := listener.AcceptTCP(); err != nil {
         logger.Println("An error ocurred accepting a new connection")
       } else {
-        go clientHandler(conn, storage)
+        go clientHandler(conn, eventful_storage)
       }
     }
   }
