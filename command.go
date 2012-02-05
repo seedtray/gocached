@@ -54,9 +54,27 @@ type TouchCommand struct {
   noreply bool
 }
 
+type IncrCommand struct {
+  session *Session
+  incr    bool
+  key     string
+  value   uint64
+  noreply bool
+}
+
+type UnknownCommand struct {
+  session *Session
+  command string
+}
+
+type UninmplementedCommand struct {
+  session *Session
+  command string
+}
+
 const (
   NA = iota
-  UnkownCommand
+  InvalidCommand
   ClientError
   ServerError
 )
@@ -80,31 +98,34 @@ func (s *Session) CommandLoop() {
 
   for line := getTokenizedLine(s.bufreader);
       line != nil; line = getTokenizedLine(s.bufreader) {
-
-    switch line[0] {
-
-    case "set", "add", "replace", "append", "prepend", "cas":
-      if cmd := (&StorageCommand{session: s}); cmd.parse(line) {
-        cmd.Exec()
-      }
-    case "get", "gets":
-      if cmd := (&RetrievalCommand{session: s}); cmd.parse(line) {
-        cmd.Exec()
-      }
-    case "delete":
-      if cmd := (&DeleteCommand{session: s}); cmd.parse(line) {
-        cmd.Exec()
-      }
-    case "touch":
-      if cmd := (&TouchCommand{session: s}); cmd.parse(line) {
-        cmd.Exec()
-      }
-    case "incr", "decr", "stats", "flush_all", "version", "quit":
-
-    default:
-      Error(s, UnkownCommand, "")
+    var cmd Command = cmdSelect(line[0], s)
+    if cmd.parse(line) {
+      cmd.Exec()
     }
   }
+}
+
+func cmdSelect(name string, s *Session) Command {
+
+    switch name {
+
+    case "set", "add", "replace", "append", "prepend", "cas":
+      return &StorageCommand{session: s}
+    case "get", "gets":
+      return &RetrievalCommand{session: s}
+    case "delete":
+      return &DeleteCommand{session: s}
+    case "touch":
+      return &TouchCommand{session: s}
+    case "incr", "decr":
+      return &IncrCommand{session: s}
+    case "stats", "flush_all", "version", "quit":
+      return &UninmplementedCommand{session: s, command: name}
+    default:
+      return &UnknownCommand{session: s, command: name}
+    }
+  //not reaching here
+  return nil
 }
 
 ////////////////////////////// ERROR COMMANDS //////////////////////////////
@@ -113,13 +134,26 @@ func (s *Session) CommandLoop() {
 func Error(s *Session, errtype int, errdesc string) bool {
   var msg string
   switch errtype {
-  case UnkownCommand: msg = "ERROR\r\n"
+  case InvalidCommand: msg = "ERROR\r\n"
   case ClientError:   msg = "CLIENT_ERROR " + errdesc + "\r\n"
   case ServerError:   msg = "SERVER_ERROR " + errdesc + "\r\n"
   }
- // logger.Println(msg)
   s.conn.Write([]byte(msg))
   return false
+}
+
+func (self *UnknownCommand) parse(line []string) bool{
+  return Error(self.session, InvalidCommand, "")
+}
+
+func (self *UnknownCommand) Exec() {
+}
+
+func (self *UninmplementedCommand) parse(line []string) bool {
+  return Error(self.session, ServerError, "Not Implemented")
+}
+
+func (self *UninmplementedCommand) Exec() {
 }
 
 ///////////////////////////// TOUCH COMMAND //////////////////////////////
@@ -321,3 +355,41 @@ func (self *StorageCommand) Exec() {
     }
   }
 }
+
+///////////////////////////// INCR/DECR COMMANDS /////////////////////////////
+
+func (self *IncrCommand) parse(line []string) bool {
+  var err os.Error
+  if len(line) < 3 {
+    return Error(self.session, ClientError, "Bad incr/decr command: missing parameters")
+  } else if self.value, err = strconv.Atoui64(line[2]); err != nil {
+    return Error(self.session, ClientError, "Bad incr/decr command: bad value")
+  }
+  self.incr = (line[0] == "incr")
+  self.key = line[1]
+
+  if len(line) == 4 && line[3] == "noreply" {
+    self.noreply = true
+  } else {
+    self.noreply = false
+  }
+  return true
+}
+
+func (self *IncrCommand) Exec() {
+  var storage = self.session.storage
+  var conn = self.session.conn
+  err, _, current := storage.Incr(self.key, self.value, self.incr)
+  if self.noreply { return }
+  if err == Ok {
+    conn.Write(current.content)
+    conn.Write([]byte("\r\n"))
+  } else if err == KeyNotFound {
+  //not reaching here
+    conn.Write([]byte("NOT_FOUND\r\n"))
+  } else if err == IllegalParameter {
+    conn.Write([]byte(fmt.Sprintf("CLIENT_ERROR cannot increment or decrement non-numeric value\r\n")))
+  }
+}
+
+

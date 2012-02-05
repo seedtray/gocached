@@ -141,16 +141,20 @@ func (self *MapCacheStorage) Incr(key string, value uint64, incr bool) (ErrorCod
 	defer self.rwLock.Unlock()
 	entry, present := self.storageMap[key]
   if present && !entry.expired() {
-	  if addValue, err := strconv.Atoui(string(entry.content)); err == nil {
+	  if addValue, err := strconv.Atoui64(string(entry.content)); err == nil {
 		  var incrValue uint64
 		  if incr {
 			  incrValue = uint64(addValue) + value
-		  } else {
+		  } else if value > addValue {
+        incrValue = 0
+      } else {
 			  incrValue = uint64(addValue) - value
 		  }
 		  incrStrValue := strconv.Uitoa64(incrValue)
       old_value := entry.content
 		  entry.content = []byte(incrStrValue)
+      entry.bytes = uint32(len(entry.content))
+      entry.cas_unique += 1
 		  return Ok, &StorageEntry{entry.exptime, entry.flags, entry.bytes, entry.cas_unique, old_value}, entry
 	  } else {
 	    return IllegalParameter, nil, nil
