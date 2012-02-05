@@ -5,16 +5,16 @@ include $(GOROOT)/src/Make.inc
 
 TARG=gocached
 GOFILES=\
+	cachestorage.go\
 	command.go\
+	eventnotifierstorage.go\
 	generationalstorage.go\
 	gocached.go\
 	hashingstorage.go\
 	heapexpiringstorage.go\
+	mapcachestorage.go\
 	mapstorage.go\
 	storage.go\
-	eventnotifierstorage.go\
-	mapcachestorage.go\
-	cachestorage.go\
 
 # gb: this is the local install
 GBROOT=.
