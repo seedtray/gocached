@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use Test::More tests => 15;
+use Test::More tests => 18;
 use FindBin qw($Bin);
 use lib "$Bin/lib";
 use MemcachedTest;
@@ -62,3 +62,9 @@ sleep(2.3);
 print $sock "add add 0 2 7\r\naddval3\r\n";
 is(scalar <$sock>, "STORED\r\n", "stored add again");
 mem_get_is($sock, "add", "addval3");
+
+print $sock "set forever 0 0 6\r\nfooval\r\n";
+is(scalar <$sock>, "STORED\r\n", "stored foo");
+mem_get_is($sock, "forever", "fooval");
+sleep(1.5);
+mem_get_is($sock, "forever", "fooval");

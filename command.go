@@ -136,10 +136,10 @@ func (self *TouchCommand) parse(line []string) bool {
   }
   self.command = line[0]
   self.key = line[1]
-  if exptime < secondsInMonth {
-    self.exptime = uint32(time.Seconds()) + uint32(exptime);
-  } else {
+  if exptime == 0 || exptime > secondsInMonth {
     self.exptime = uint32(exptime)
+  } else {
+    self.exptime = uint32(time.Seconds()) + uint32(exptime);
   }
   if line[len(line)-1] == "noreply" {
     self.noreply = true
