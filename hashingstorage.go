@@ -8,8 +8,6 @@ type HashingStorage struct {
   storageBuckets []CacheStorage
 }
 
-type StorageFactory func () Storage
-
 func newHashingStorage(size uint32, factory CacheStorageFactory) *HashingStorage {
   s := &HashingStorage{size, hornerHasher, make([]CacheStorage, size)}
   for i := uint32(0); i < size; i++  {

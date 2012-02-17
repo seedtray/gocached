@@ -26,7 +26,7 @@ func main() {
 		"storage implementation (generational, heap, leak)")
 	var expiring_frequency = flag.Int64("expiring-interval", 10,
 		"expiring interval in seconds")
-  var partitions = flag.Int("partitions", 10, 
+  var partitions = flag.Int("partitions", 10,
     "storage partitions (0 or 1 to disable)")
 	flag.Parse()
 

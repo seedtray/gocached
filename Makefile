@@ -13,8 +13,6 @@ GOFILES=\
 	hashingstorage.go\
 	heapexpiringstorage.go\
 	mapcachestorage.go\
-	mapstorage.go\
-	storage.go\
 
 # gb: this is the local install
 GBROOT=.

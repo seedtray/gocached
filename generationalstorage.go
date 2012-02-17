@@ -67,7 +67,6 @@ func (self *GenerationalStorage) removeGenerationToCollect(now int64) *Generatio
     gen := self.generations[now]
     self.generations[now] = nil, false
     self.lastCollected += GenerationSize
- //   logger.Printf("Updating last collected generation to %s . Generation %s", time.SecondsToUTC(self.lastCollected), gen)
     return gen
   }
   return nil
@@ -76,16 +75,13 @@ func (self *GenerationalStorage) removeGenerationToCollect(now int64) *Generatio
 func (self *GenerationalStorage) findGeneration(timeSlot int64, createIfNotExists bool) *Generation {
   generation := self.generations[timeSlot]
   if generation == nil && createIfNotExists {
-   // logger.Printf("Creating new generation %s", time.SecondsToUTC(timeSlot))
     generation = newGeneration(timeSlot)
     self.generations[timeSlot] = generation
   }
-  //logger.Printf("Returning generation %s", generation)
   return generation
 }
 
 func (self *Generation) addInhabitant(key string) {
-  //logger.Printf("Adding key %s to generation %s", key,  time.SecondsToUTC(self.startEpoch))
   self.inhabitants[key] = true
 }
 
@@ -94,21 +90,17 @@ func processNodeChanges(storage *GenerationalStorage, channel <-chan UpdateMessa
     msg := <-channel
     switch msg.op {
     case Add:
-    //  logger.Println("Processing Add message")
       timeSlot := msg.getNewTimeSlot()
       generation := storage.findGeneration(timeSlot, true)
-      //generation.addInhabitant(msg.key)
       generation.inhabitants[msg.key] = true
       storage.items += 1
     case Delete:
-    //  logger.Println("Processing Delete message")
       timeSlot := msg.getCurrentTimeSlot()
       if generation := storage.findGeneration(timeSlot, false); generation != nil {
         generation.inhabitants[msg.key] = false, false
         storage.items -= 1
       }
     case Change:
-   //   logger.Println("Processing Change message")
       timeSlot := msg.getCurrentTimeSlot()
       if generation := storage.findGeneration(timeSlot, false); generation != nil {
         generation.inhabitants[msg.key] = false, false
@@ -123,9 +115,7 @@ func processNodeChanges(storage *GenerationalStorage, channel <-chan UpdateMessa
         if generation == nil {
           break
         }
-   //     logger.Printf("Collecting generation %d", generation)
         for key , _ := range(generation.inhabitants) {
-  //        logger.Printf("Collecting item with key %s", key)
           storage.cacheStorage.Expire(key, false)
           storage.items -= 1
         }
