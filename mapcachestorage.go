@@ -1,9 +1,9 @@
 package main
 
 import (
-  "sync"
-  "time"
-  "strconv"
+	"strconv"
+	"sync"
+	"time"
 )
 
 type MapCacheStorage struct {
@@ -12,9 +12,9 @@ type MapCacheStorage struct {
 }
 
 func newMapCacheStorage() *MapCacheStorage {
-  storage := &MapCacheStorage{}
-  storage.Init()
-  return storage
+	storage := &MapCacheStorage{}
+	storage.Init()
+	return storage
 }
 
 func (self *MapCacheStorage) Init() {
@@ -22,11 +22,11 @@ func (self *MapCacheStorage) Init() {
 }
 
 func (self *StorageEntry) expired() bool {
-  if self.exptime == 0 {
-    return false
-  }
-	now := uint32(time.Seconds())
-  return self.exptime <= now
+	if self.exptime == 0 {
+		return false
+	}
+	now := uint32(time.Now().Unix())
+	return self.exptime <= now
 }
 
 func (self *MapCacheStorage) Set(key string, flags uint32, exptime uint32, bytes uint32, content []byte) (previous *StorageEntry, result *StorageEntry) {
@@ -36,8 +36,8 @@ func (self *MapCacheStorage) Set(key string, flags uint32, exptime uint32, bytes
 	var newEntry *StorageEntry
 	if present && !entry.expired() {
 		newEntry = &StorageEntry{exptime, flags, bytes, entry.cas_unique + 1, content}
-	  self.storageMap[key] = newEntry
-    return entry, newEntry
+		self.storageMap[key] = newEntry
+		return entry, newEntry
 	}
 	newEntry = &StorageEntry{exptime, flags, bytes, 0, content}
 	self.storageMap[key] = newEntry
@@ -51,12 +51,12 @@ func (self *MapCacheStorage) Add(key string, flags uint32, exptime uint32, bytes
 	if present && !entry.expired() {
 		return KeyAlreadyInUse, nil
 	}
-  entry = &StorageEntry{exptime, flags, bytes, 0, content}
+	entry = &StorageEntry{exptime, flags, bytes, 0, content}
 	self.storageMap[key] = entry
 	return Ok, entry
 }
 
-func (self *MapCacheStorage) Replace(key string, flags uint32, exptime uint32, bytes uint32, content []byte) (ErrorCode,*StorageEntry,*StorageEntry) {
+func (self *MapCacheStorage) Replace(key string, flags uint32, exptime uint32, bytes uint32, content []byte) (ErrorCode, *StorageEntry, *StorageEntry) {
 	self.rwLock.Lock()
 	defer self.rwLock.Unlock()
 	entry, present := self.storageMap[key]
@@ -68,7 +68,7 @@ func (self *MapCacheStorage) Replace(key string, flags uint32, exptime uint32, b
 	return KeyNotFound, nil, nil
 }
 
-func (self *MapCacheStorage) Append(key string, bytes uint32, content []byte) (ErrorCode,*StorageEntry,*StorageEntry) {
+func (self *MapCacheStorage) Append(key string, bytes uint32, content []byte) (ErrorCode, *StorageEntry, *StorageEntry) {
 	self.rwLock.Lock()
 	defer self.rwLock.Unlock()
 	entry, present := self.storageMap[key]
@@ -122,7 +122,7 @@ func (self *MapCacheStorage) Get(key string) (ErrorCode, *StorageEntry) {
 	if present && !entry.expired() {
 		return Ok, entry
 	}
-  return KeyNotFound, nil
+	return KeyNotFound, nil
 }
 
 func (self *MapCacheStorage) Delete(key string) (ErrorCode, *StorageEntry) {
@@ -130,7 +130,7 @@ func (self *MapCacheStorage) Delete(key string) (ErrorCode, *StorageEntry) {
 	defer self.rwLock.Unlock()
 	entry, present := self.storageMap[key]
 	if present && !entry.expired() {
-		self.storageMap[key] = nil, false
+		delete(self.storageMap, key)
 		return Ok, entry
 	}
 	return KeyNotFound, nil
@@ -140,26 +140,26 @@ func (self *MapCacheStorage) Incr(key string, value uint64, incr bool) (ErrorCod
 	self.rwLock.Lock()
 	defer self.rwLock.Unlock()
 	entry, present := self.storageMap[key]
-  if present && !entry.expired() {
-	  if addValue, err := strconv.Atoui64(string(entry.content)); err == nil {
-		  var incrValue uint64
-		  if incr {
-			  incrValue = uint64(addValue) + value
-		  } else if value > addValue {
-        incrValue = 0
-      } else {
-			  incrValue = uint64(addValue) - value
-		  }
-		  incrStrValue := strconv.Uitoa64(incrValue)
-      old_value := entry.content
-		  entry.content = []byte(incrStrValue)
-      entry.bytes = uint32(len(entry.content))
-      entry.cas_unique += 1
-		  return Ok, &StorageEntry{entry.exptime, entry.flags, entry.bytes, entry.cas_unique, old_value}, entry
-	  } else {
-	    return IllegalParameter, nil, nil
-    }
-  }
+	if present && !entry.expired() {
+		if addValue, err := strconv.ParseUint(string(entry.content), 10, 64); err == nil {
+			var incrValue uint64
+			if incr {
+				incrValue = uint64(addValue) + value
+			} else if value > addValue {
+				incrValue = 0
+			} else {
+				incrValue = uint64(addValue) - value
+			}
+			incrStrValue := strconv.FormatUint(incrValue, 10)
+			old_value := entry.content
+			entry.content = []byte(incrStrValue)
+			entry.bytes = uint32(len(entry.content))
+			entry.cas_unique += 1
+			return Ok, &StorageEntry{entry.exptime, entry.flags, entry.bytes, entry.cas_unique, old_value}, entry
+		} else {
+			return IllegalParameter, nil, nil
+		}
+	}
 	return KeyNotFound, nil, nil
 }
 
@@ -169,8 +169,8 @@ var nullStorageEntry = &StorageEntry{}
 func (self *MapCacheStorage) Expire(key string, check bool) {
 	self.rwLock.Lock()
 	defer self.rwLock.Unlock()
-  entry, present := self.storageMap[key]
+	entry, present := self.storageMap[key]
 	if present && (!check || entry.expired()) {
-		self.storageMap[key] = nullStorageEntry, false
+		delete(self.storageMap, key)
 	}
 }
